@@ -1,0 +1,1296 @@
+/* Fonts, colours, theme switching, the toolbar rail, the splitter, the icon buttons and the form fields all
+   come from celbridge.css. Everything here is the editor's own: the canvas, the nodes and connections drawn
+   on it, the inspector layout, and the reading view. */
+
+:root {
+    --grid-size: 20px;
+    /* The panel is sized as a share of the document, so it holds its proportions as the document resizes.
+       The script clamps a drag to the same bounds. */
+    --inspector-min: 20%;
+    --inspector-default: 30%;
+    /* The panel may take most of the document, so a node's text and preview can have the room. */
+    --inspector-max: 90%;
+
+    /* The canvas palette. The graph is the document's content rather than host chrome, and it reads better
+       as a surface of its own than as another panel: a blue-tinted field, a grid drawn on it, and nodes
+       that carry colour. It is deliberately a step away from the host's neutral surfaces, and it still
+       takes a value per theme so it sits correctly in either. These are the light-theme values, with the
+       dark theme's below. The host's tokens still carry the text on the nodes and every panel around the
+       canvas. */
+    --story-canvas-bg: #eef2fa;
+    --story-grid-line: rgba(47, 72, 138, 0.1);
+    --story-node-bg: #ffffff;
+    --story-node-border: #3e6fa8;
+    --story-node-ring: rgba(62, 111, 168, 0.22);
+    --story-node-selected: #c06a00;
+    --story-node-selected-ring: rgba(192, 106, 0, 0.22);
+    --story-node-connected: #1f7a57;
+    --story-node-connected-ring: rgba(31, 122, 87, 0.2);
+    /* Read by the script: the connections are painted on a canvas, which cannot inherit a colour. */
+    --story-connection-color: rgba(38, 54, 92, 0.45);
+
+    /* Play and stop carry the colours those controls carry everywhere, so what they do is clear before
+       the tooltip is read. Tinted rather than filled, so they still read as rail buttons. */
+    --story-play-text: #1a6b4c;
+    --story-play-bg: rgba(31, 122, 87, 0.12);
+    --story-play-hover-bg: rgba(31, 122, 87, 0.22);
+    --story-stop-text: #b3261e;
+    --story-stop-bg: rgba(179, 38, 30, 0.12);
+    --story-stop-hover-bg: rgba(179, 38, 30, 0.22);
+
+    /* The PDF icon's badge and download arrow, in the red the format is known by. */
+    --story-pdf-red: #d32f2f;
+}
+
+:root[data-theme="dark"] {
+    --story-canvas-bg: #1e1e2e;
+    --story-grid-line: rgba(160, 175, 235, 0.1);
+    --story-node-bg: #2a2a3e;
+    --story-node-border: #6c9ac3;
+    --story-node-ring: rgba(108, 154, 195, 0.25);
+    --story-node-selected: #f0a500;
+    --story-node-selected-ring: rgba(240, 165, 0, 0.25);
+    --story-node-connected: #4caf86;
+    --story-node-connected-ring: rgba(76, 175, 134, 0.2);
+    --story-connection-color: rgba(255, 255, 255, 0.45);
+
+    --story-play-text: #4caf86;
+    --story-play-bg: rgba(76, 175, 134, 0.18);
+    --story-play-hover-bg: rgba(76, 175, 134, 0.3);
+    --story-stop-text: #ef5350;
+    --story-stop-bg: rgba(239, 83, 80, 0.18);
+    --story-stop-hover-bg: rgba(239, 83, 80, 0.3);
+
+    --story-pdf-red: #ef5350;
+}
+
+html, body {
+    height: 100%;
+    overflow: hidden;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* ── Toolbar ── */
+.play-button {
+    color: var(--story-play-text);
+    background: var(--story-play-bg);
+}
+
+.play-button:hover:not(:disabled) {
+    background: var(--story-play-hover-bg);
+}
+
+.play-button.playing {
+    color: var(--story-stop-text);
+    background: var(--story-stop-bg);
+}
+
+.play-button.playing:hover:not(:disabled) {
+    background: var(--story-stop-hover-bg);
+}
+
+/* Export to PDF and the story settings sit together at the far end of the rail. */
+.cel-rail-horizontal .pdf-button {
+    margin-left: auto;
+}
+
+/* The PDF icon: a page outlined in the text colour, a red PDF badge over its left edge, and a red arrow
+   pointing down out of its bottom corner. The arrow is edged in the rail's ground so it reads clear of the
+   page it overlaps. */
+.pdf-icon {
+    width: 22px;
+    height: 22px;
+    overflow: visible;
+}
+
+.pdf-icon-page {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.3;
+    stroke-linejoin: round;
+}
+
+.pdf-icon-badge {
+    fill: var(--story-pdf-red);
+}
+
+.pdf-icon-label {
+    fill: #ffffff;
+    font-family: var(--cel-font-ui, sans-serif);
+    font-size: 5.2px;
+    font-weight: 700;
+    text-anchor: middle;
+}
+
+.pdf-icon-arrow {
+    fill: var(--story-pdf-red);
+    stroke: var(--cel-content-bg);
+    stroke-width: 0.8;
+    stroke-linejoin: round;
+    paint-order: stroke;
+}
+
+.pdf-busy-icon,
+.pdf-button.busy .pdf-icon {
+    display: none;
+}
+
+.pdf-button.busy .pdf-busy-icon {
+    display: inline;
+}
+
+.pdf-button:disabled .pdf-icon {
+    opacity: 0.4;
+}
+
+/* ── Layout ── */
+#main {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+}
+
+#editor-view {
+    display: flex;
+    width: 100%;
+    height: 100%;
+}
+
+/* Too narrow to spare a column for the panel, so it goes below the canvas instead of beside it. The script
+   measures the document and writes the arrangement here, as the host's own stacking surfaces do. */
+#editor-view[data-layout="stacked"] {
+    flex-direction: column;
+}
+
+/* The shared splitter is a column divider; stacked, it turns on its side. */
+#editor-view[data-layout="stacked"] > #splitter {
+    width: auto;
+    height: var(--cel-splitter-width, 8px);
+    cursor: ns-resize;
+    border-left: none;
+    border-top: 1px solid var(--cel-panel-edge);
+}
+
+#editor-view[data-layout="stacked"] > #splitter::after {
+    top: 50%;
+    bottom: auto;
+    left: 0;
+    right: 0;
+    width: auto;
+    height: 4px;
+    transform: translateY(-50%);
+}
+
+/* ── Views ──
+   The graph and the sequence list take turns in the area left of (or above) the panel. */
+#view-area {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    position: relative;
+    display: flex;
+}
+
+/* ── Canvas ── */
+#canvas-container {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background-color: var(--story-canvas-bg);
+    background-image:
+        linear-gradient(var(--story-grid-line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--story-grid-line) 1px, transparent 1px);
+    background-size: var(--grid-size) var(--grid-size);
+}
+
+#connection-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+}
+
+#canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+}
+
+/* ── Story nodes ── */
+.story-node {
+    position: absolute;
+    background: var(--story-node-bg);
+    border: 2px solid var(--story-node-border);
+    border-radius: var(--cel-radius-control);
+    padding: 10px 16px;
+    color: var(--cel-text-primary);
+    cursor: grab;
+    user-select: none;
+    white-space: nowrap;
+    font-weight: var(--cel-font-weight-strong);
+    font-size: var(--cel-font-size-small);
+    transform: translate(-50%, -50%);
+    transition: border-color 0.15s, box-shadow 0.15s;
+    min-width: 80px;
+    text-align: center;
+}
+
+.story-node:hover { box-shadow: 0 0 0 3px var(--story-node-ring); }
+
+.story-node.selected {
+    border-color: var(--story-node-selected);
+    box-shadow: 0 0 0 3px var(--story-node-selected-ring);
+}
+
+.story-node.connected-out {
+    border-color: var(--story-node-connected);
+    box-shadow: 0 0 0 3px var(--story-node-connected-ring);
+}
+
+.story-node:active { cursor: grabbing; }
+
+/* The first node in the default sequence is where the story starts. The label sits just above the node's
+   top right corner and is sized in em, so it scales with the zoom along with the node. */
+.story-node.sequence-start::before,
+.name-box-slot.sequence-start::before {
+    content: attr(data-start-label);
+    position: absolute;
+    right: -2px;
+    bottom: 100%;
+    margin-bottom: 0.3em;
+    font-size: 0.65em;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    color: var(--story-node-border);
+    pointer-events: none;
+}
+
+/* ── Default sequence ──
+   The list view, shown in place of the graph. */
+#sequence-panel {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--cel-content-bg);
+}
+
+.sequence-header {
+    padding: 8px 12px;
+    font-size: var(--cel-font-size-small);
+    font-weight: var(--cel-font-weight-strong);
+    color: var(--cel-text-secondary);
+    border-bottom: 1px solid var(--cel-panel-edge);
+}
+
+#sequence-list {
+    flex: 1;
+    overflow-y: auto;
+    list-style: none;
+    margin: 0;
+    padding: 4px;
+}
+
+.sequence-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    border-radius: var(--cel-radius-control);
+    font-size: var(--cel-font-size-small);
+    color: var(--cel-text-primary);
+    cursor: pointer;
+    user-select: none;
+}
+
+.sequence-item:hover { background: var(--cel-button-hover-bg); }
+
+.sequence-item.selected {
+    background: var(--cel-accent);
+    color: var(--cel-accent-text);
+}
+
+.sequence-item.dragging {
+    opacity: 0.6;
+    outline: 1px dashed var(--cel-text-secondary);
+}
+
+.sequence-handle {
+    flex-shrink: 0;
+    cursor: grab;
+    touch-action: none;
+    opacity: 0.7;
+}
+
+.sequence-item.dragging .sequence-handle { cursor: grabbing; }
+
+.sequence-number {
+    flex-shrink: 0;
+    min-width: 1.5em;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.7;
+}
+
+.sequence-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* A row's name while it is being edited: a box outlined like a node, filling the name's place. The row
+   can't be selected as text, but the box's own text can. Scoped by id to outrank the shared stylesheet's
+   text-input rule. */
+#sequence-list input.sequence-name-input {
+    flex: 1;
+    min-width: 0;
+    margin: -2px 0;
+    padding: 1px 6px;
+    background: var(--story-node-bg);
+    border: 2px solid var(--story-node-border);
+    border-radius: var(--cel-radius-control);
+    color: var(--cel-text-primary);
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: var(--cel-font-weight-strong);
+    outline: none;
+    box-shadow: 0 0 0 3px var(--story-node-ring);
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+/* ── Notice ── */
+#notice {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: calc(100% - 24px);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 6px 6px 12px;
+    /* The notice tint is translucent, so it is layered over an opaque surface rather than over the grid
+       lines that would otherwise show through it. */
+    background: linear-gradient(var(--cel-notice-bg), var(--cel-notice-bg)), var(--cel-content-bg);
+    border: 1px solid var(--cel-warning-text);
+    border-radius: var(--cel-radius-control);
+    color: var(--cel-text-primary);
+    font-size: var(--cel-font-size-small);
+    z-index: 1;
+}
+
+#notice > .bi {
+    flex-shrink: 0;
+    color: var(--cel-warning-text);
+    font-size: var(--cel-icon-size-small);
+}
+
+#notice .cel-icon-button {
+    width: 24px;
+    height: 24px;
+    font-size: var(--cel-icon-size-small);
+    color: var(--cel-text-secondary);
+}
+
+/* ── Inspector ──
+   The panel is the section area the host's settings surfaces are built on, inset from the document edge by
+   the same margin they keep. The header, close and fields are the shared component's; the rules here size
+   the panel and let the story text fill what the header leaves. */
+#inspector {
+    width: var(--inspector-default);
+    min-width: var(--inspector-min);
+    max-width: var(--inspector-max);
+    flex-shrink: 0;
+    display: flex;
+    padding: var(--cel-settings-inset);
+}
+
+/* Stacked, the panel takes its share of the document's height rather than its width. */
+#editor-view[data-layout="stacked"] > #inspector {
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    height: var(--inspector-default);
+    min-height: var(--inspector-min);
+    max-height: var(--inspector-max);
+}
+
+
+#inspector > .cel-section-area {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--cel-panel-edge);
+    border-radius: var(--cel-radius-panel);
+}
+
+.inspector-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* The story's or node's custom data sits beside its text, on the right, when the panel is wide enough for both;
+   the text keeps the left and the data scrolls on its own. A divider between them sets the data's share of the
+   panel (--data-share, written by script). Narrower than that, the data goes under the text and the divider
+   is not shown. */
+#inspector .cel-section-content {
+    container-type: inline-size;
+}
+
+.data-splitter {
+    display: none;
+}
+
+@container (min-width: 640px) {
+    .inspector-section[data-panel="story"],
+    .inspector-section[data-panel="node"] {
+        flex-direction: row;
+        gap: 0;
+    }
+
+    .inspector-section[data-panel="story"] > .inspector-fill-field,
+    .inspector-section[data-panel="node"] > .inspector-fill-field {
+        min-width: 160px;
+    }
+
+    .inspector-section[data-panel="story"] > .data-sections,
+    .inspector-section[data-panel="node"] > .data-sections {
+        flex: 0 1 var(--data-share, 42%);
+        min-width: 200px;
+        min-height: 0;
+        overflow-y: auto;
+    }
+
+    /* Drawn as the text / preview divider is: a band with a short grip, in the accent while hovered or
+       dragged. Only shown while there is custom data beside the text. */
+    .data-splitter:has(+ .data-sections:not(.hidden)) {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 16px;
+        cursor: ew-resize;
+        touch-action: none;
+    }
+}
+
+.data-splitter::after {
+    content: '';
+    width: 4px;
+    height: 36px;
+    border-radius: 2px;
+    background: var(--cel-panel-edge);
+    transition: background 0.15s;
+}
+
+.data-splitter:hover::after,
+.data-splitter.dragging::after {
+    background: var(--cel-accent);
+}
+
+/* The settings are three groups, set well apart so each reads as its own. */
+.inspector-section[data-panel="settings"] {
+    gap: 40px;
+}
+
+/* The fields fill the panel rather than the settings-form width the shared component caps them at. */
+.inspector-line-field,
+.inspector-fill-field {
+    max-width: none;
+    margin-bottom: 0;
+}
+
+/* The prose field takes whatever height the section leaves. */
+.inspector-fill-field {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+/* The node and story headers: anything the panel offers at the left (the node's text view buttons), the
+   name to be edited in the middle, and the heading at the right. */
+.name-header {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 8px;
+}
+
+.name-header > h1 {
+    justify-self: end;
+}
+
+/* The middle of the header holds the name box. The slot carries the START label, since an input can't, and
+   leaves room above the box for it. */
+.name-box-slot {
+    position: relative;
+    justify-self: center;
+    min-width: 0;
+    max-width: 100%;
+    display: flex;
+    margin-top: 0.8em;
+    font-size: var(--cel-font-size-small);
+}
+
+/* Always a text box, drawn the way a node is on the canvas: a blue rounded outline around the name in bold,
+   centred. Hovering rings it as a node does, and while it is being typed in the ring stays. Scoped by id to
+   outrank the shared stylesheet's text-input rule. */
+#inspector input.name-box {
+    max-width: 100%;
+    padding: 4px 12px;
+    background: var(--story-node-bg);
+    border: 2px solid var(--story-node-border);
+    border-radius: var(--cel-radius-control);
+    color: var(--cel-text-primary);
+    font-family: inherit;
+    font-size: var(--cel-font-size-small);
+    font-weight: var(--cel-font-weight-strong);
+    text-align: center;
+    cursor: text;
+    outline: none;
+    transition: box-shadow 0.15s;
+}
+
+#inspector input.name-box:hover,
+#inspector input.name-box:focus {
+    box-shadow: 0 0 0 3px var(--story-node-ring);
+}
+
+/* A story with no name yet shows the placeholder, lighter, so it reads as a prompt rather than a title. */
+#inspector input.name-box::placeholder {
+    color: var(--cel-text-secondary);
+    font-style: italic;
+    font-weight: normal;
+    opacity: 1;
+}
+
+/* Preview gives the panel to the slide: the text's label steps aside. */
+#inspector[data-text-mode="preview"] .text-field-label {
+    display: none;
+}
+
+.text-mode-buttons {
+    display: flex;
+    gap: 2px;
+}
+
+.text-mode-button {
+    width: 24px;
+    height: 24px;
+    font-size: var(--cel-icon-size-small);
+    color: var(--cel-text-secondary);
+}
+
+.text-mode-button.selected {
+    background: var(--cel-accent);
+    color: var(--cel-accent-text);
+}
+
+/* The text-above-preview split is the side-by-side icon turned on its side. */
+.split-rows-icon {
+    display: inline-block;
+    transform: rotate(90deg);
+}
+
+/* Source shows the text alone, preview the slide alone, and the two splits both: side by side, or the
+   text above the preview. The author picks the split, whichever way the panel sits. */
+#text-editor {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+}
+
+#text-editor[data-split="columns"] {
+    flex-direction: row;
+}
+
+#text-editor[data-mode="source"] > #inspector-preview,
+#text-editor[data-mode="preview"] > #inspector-text {
+    display: none;
+}
+
+#text-editor > * {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+/* The preview is scaled to the panel's width and is as tall as that makes the slide, so in a column it
+   keeps its own height and the text takes the rest. Past the panel's height, the panel scrolls. */
+#text-editor > #inspector-preview {
+    flex: none;
+}
+
+/* ── Split ──
+   The text and the preview divide the field by the divider's proportion, so the panel itself no longer
+   scrolls: the text scrolls within its share when it has more lines than fit, and the slide is fitted into
+   the rest, letterboxed. The floor keeps both usable in a short panel; below it, the panel scrolls. */
+#text-splitter {
+    display: none;
+}
+
+#text-editor[data-mode="split"] {
+    gap: 0;
+    min-height: 240px;
+}
+
+#text-editor[data-mode="split"] > #inspector-text {
+    flex: var(--text-grow, 50) 1 0;
+    min-height: 0;
+}
+
+#text-editor[data-mode="split"] > #inspector-preview {
+    flex: var(--preview-grow, 50) 1 0;
+    align-self: stretch;
+    display: flex;
+    min-height: 0;
+}
+
+#text-editor[data-mode="split"] #inspector-slide,
+#text-editor[data-mode="split"] #inspector-slide > .marpit {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+}
+
+#text-editor[data-mode="split"] #inspector-preview svg[data-marpit-svg] {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* The divider: a band with a short grip, which turns on its side when the text and preview sit side by
+   side, and takes the accent while it is hovered or dragged. The text and preview are fitted to their
+   shares either way, so the slide is letterboxed in whichever box it is given. */
+#text-editor[data-mode="split"] > #text-splitter {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 12px;
+    cursor: ns-resize;
+    touch-action: none;
+}
+
+#text-splitter::after {
+    content: '';
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--cel-panel-edge);
+    transition: background 0.15s;
+}
+
+#text-splitter:hover::after,
+#text-splitter.dragging::after {
+    background: var(--cel-accent);
+}
+
+#text-editor[data-split="columns"] > #text-splitter {
+    cursor: ew-resize;
+}
+
+#text-editor[data-split="columns"] > #text-splitter::after {
+    width: 4px;
+    height: 36px;
+}
+
+#inspector-preview {
+    display: block;
+    /* Holds the previous / next buttons over the slide's corner. */
+    position: relative;
+    min-height: 60px;
+    overflow: hidden;
+    border: 1px solid var(--cel-panel-edge);
+    border-radius: var(--cel-radius-control);
+    background: var(--cel-content-bg);
+}
+
+/* Below this the field stops giving height back and the section scrolls instead, so a panel squeezed by a
+   stacked layout or a short document still shows a usable field rather than a sliver of one. */
+.inspector-fill-field textarea {
+    flex: 1;
+    min-height: 120px;
+    resize: none;
+}
+
+/* The node's own text is Markdown, so it is set in the monospace face the code surfaces use. The story
+   description is ordinary prose and stays in the UI face. */
+#inspector-text {
+    font-family: var(--cel-font-mono);
+    font-size: var(--cel-font-size-small);
+    line-height: 1.6;
+}
+
+/* The default sequence settings (play-mode navigation, canvas arrows), in the settings panel. Each group's
+   options are indented under the checkbox that reveals them. */
+.nav-settings,
+.nav-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.nav-options {
+    padding-left: 22px;
+}
+
+.setting-row .field-label {
+    margin-bottom: 4px;
+}
+
+.setting-row input[type="color"] {
+    width: 48px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid var(--cel-panel-edge);
+    border-radius: var(--cel-radius-control);
+    background: none;
+    cursor: pointer;
+}
+
+.range-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.range-row input[type="range"] {
+    flex: 1;
+    min-width: 0;
+    accent-color: var(--cel-accent);
+}
+
+.range-row output {
+    min-width: 3em;
+    text-align: right;
+    font-size: var(--cel-font-size-small);
+    font-variant-numeric: tabular-nums;
+    color: var(--cel-text-secondary);
+}
+
+.checkbox-field,
+.radio-group label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--cel-font-size-small);
+    color: var(--cel-text-primary);
+    cursor: pointer;
+}
+
+.checkbox-field input,
+.radio-group input {
+    margin: 0;
+    accent-color: var(--cel-accent);
+}
+
+.radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border: none;
+    margin: 0;
+    padding: 0;
+}
+
+.radio-group legend {
+    padding: 0;
+}
+
+/* ── Custom data ──
+   Each schema the story uses is a section that folds away, beside (or under) the story's description or the
+   node's text, holding an input per field. A list's rows are boxed, with their move and remove buttons down the
+   side. */
+.data-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.data-section {
+    border: 1px solid var(--cel-panel-edge);
+    border-radius: var(--cel-radius-control);
+}
+
+.data-section > summary {
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: var(--cel-font-size-small);
+    font-weight: var(--cel-font-weight-strong);
+    color: var(--cel-text-primary);
+}
+
+.data-section-body {
+    padding: 4px 10px 10px;
+}
+
+/* A field's name sits to the left of its input, so more fields fit down the panel. The names share one column
+   (each field is a subgrid row of the section's grid), as wide as the longest name up to a cap. A field that
+   doesn't fit that shape (a checkbox, a list, a value shown as JSON) and any message take the whole row. */
+.data-section-body,
+.data-row-fields {
+    display: grid;
+    grid-template-columns: fit-content(40%) minmax(0, 1fr);
+    gap: 8px 12px;
+}
+
+.data-section-body > *,
+.data-row-fields > * {
+    grid-column: 1 / -1;
+}
+
+.data-field {
+    display: grid;
+    grid-template-columns: subgrid;
+    align-items: baseline;
+    min-width: 0;
+}
+
+.data-field > .field-label {
+    margin-bottom: 0;
+}
+
+.data-field-wide {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+}
+
+.data-field input[type="text"],
+.data-field input[type="number"],
+.data-field textarea,
+.data-field select,
+.data-row-fields > input {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.data-field textarea {
+    min-height: 3.5em;
+    resize: vertical;
+}
+
+.data-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.data-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.data-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 6px;
+    border: 1px solid var(--cel-panel-edge);
+    border-radius: var(--cel-radius-control);
+}
+
+.data-row-fields {
+    flex: 1;
+    min-width: 0;
+}
+
+.data-row-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.data-row-buttons .cel-icon-button,
+.schema-item .cel-icon-button {
+    width: 22px;
+    height: 22px;
+    font-size: var(--cel-icon-size-small);
+}
+
+.data-add {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: var(--cel-font-size-small);
+}
+
+.data-message {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    font-size: var(--cel-font-size-small);
+    color: var(--cel-text-secondary);
+}
+
+.data-message.warning > .bi,
+.schema-error {
+    color: var(--cel-warning-text);
+}
+
+.data-message > button {
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+/* A value the editor can't show as a field, shown as the JSON it is in the file. */
+.data-json {
+    max-height: 12em;
+    margin: 0;
+    padding: 6px 8px;
+    overflow: auto;
+    white-space: pre-wrap;
+    font-family: var(--cel-font-mono);
+    font-size: var(--cel-font-size-small);
+    background: var(--cel-content-bg);
+    border: 1px solid var(--cel-panel-edge);
+    border-radius: var(--cel-radius-control);
+}
+
+.schema-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.schema-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--cel-font-size-small);
+    color: var(--cel-text-primary);
+}
+
+.schema-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.schema-empty {
+    font-size: var(--cel-font-size-small);
+    color: var(--cel-text-secondary);
+}
+
+/* ── PDF save dialog ──
+   A modal over the editor, laid out as a save dialog is: where on the left, what is already there on the
+   right, and the name below. */
+.save-dialog {
+    width: min(640px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    padding: 0;
+    border: 1px solid var(--cel-panel-edge);
+    border-radius: var(--cel-radius-panel);
+    background: var(--cel-content-bg);
+    color: var(--cel-text-primary);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.save-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.save-dialog form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+}
+
+.save-dialog h2 {
+    margin: 0;
+    font-size: 1.1em;
+    font-weight: var(--cel-font-weight-strong);
+}
+
+.save-dialog .field-label {
+    font-size: var(--cel-font-size-small);
+    font-weight: var(--cel-font-weight-strong);
+}
+
+.save-dialog-columns {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    gap: 12px;
+}
+
+@media (max-width: 520px) {
+    .save-dialog-columns { grid-template-columns: 1fr; }
+}
+
+.save-dialog-column {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.save-dialog-list {
+    height: 200px;
+    overflow-y: auto;
+    list-style: none;
+    margin: 0;
+    padding: 4px;
+    border: 1px solid var(--cel-panel-edge);
+    border-radius: var(--cel-radius-control);
+}
+
+.save-dialog-list li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    /* Folders are indented by their depth in the project. */
+    padding: 3px 6px 3px calc(6px + var(--depth, 0) * 16px);
+    border-radius: var(--cel-radius-control);
+    font-size: var(--cel-font-size-small);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+}
+
+.save-dialog-list li > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.save-dialog-list li:hover { background: var(--cel-button-hover-bg); }
+
+.save-dialog-list li.selected {
+    background: var(--cel-accent);
+    color: var(--cel-accent-text);
+}
+
+.save-dialog-list li.empty {
+    color: var(--cel-text-secondary);
+    font-style: italic;
+    cursor: default;
+}
+
+.save-dialog-list li.empty:hover { background: none; }
+
+.save-dialog-list .bi-file-earmark-pdf { color: var(--story-pdf-red); }
+.save-dialog-list li.selected .bi { color: inherit; }
+
+.save-dialog-name {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* Where the file will be written, as the resource key the project knows it by. */
+.save-dialog-path {
+    min-height: 1.3em;
+    font-family: var(--cel-font-mono);
+    font-size: var(--cel-font-size-small);
+    color: var(--cel-text-secondary);
+    word-break: break-all;
+}
+
+.save-dialog-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 10px;
+    background: linear-gradient(var(--cel-notice-bg), var(--cel-notice-bg)), var(--cel-content-bg);
+    border: 1px solid var(--cel-warning-text);
+    border-radius: var(--cel-radius-control);
+    font-size: var(--cel-font-size-small);
+}
+
+.save-dialog-warning > .bi { color: var(--cel-warning-text); }
+
+/* A name that can't be used at all, rather than one that will replace a file. */
+.save-dialog-warning.error { border-color: var(--story-stop-text); }
+.save-dialog-warning.error > .bi { color: var(--story-stop-text); }
+
+.save-dialog-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+/* ── PDF export ──
+   Slides are laid out here, out of sight but in the page, so they can be measured and painted. */
+.pdf-stage {
+    position: fixed;
+    top: 0;
+    left: -20000px;
+    pointer-events: none;
+}
+
+/* ── Play view ──
+   A passage is rendered as a Marp slide, so the slide brings its own typography, colours and layout. What
+   is left here is the room it is given and the fade between passages. */
+#play-view {
+    position: absolute;
+    inset: 0;
+    background: var(--cel-content-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 24px;
+}
+
+/* Room on the side the previous / next buttons sit, so they don't cover the slide. */
+#play-view[data-nav-position^="top"] {
+    padding-top: 56px;
+}
+
+#play-view[data-nav-position^="bottom"] {
+    padding-bottom: 56px;
+}
+
+#play-content {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    max-width: 1100px;
+}
+
+#play-text {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+}
+
+#play-text.visible { opacity: 1; }
+
+/* Marp wraps its slide in a container of its own, which has to carry the height down to the SVG. */
+#play-text > .marpit {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+}
+
+/* Marp lays a slide out at a fixed size and scales it through this SVG. The SVG carries a viewBox, so given
+   a box it fits itself into it and keeps the slide's shape — the view hands it the room left over, however
+   short or narrow the document is. */
+#play-text svg[data-marpit-svg] {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* In the node preview the slide takes the panel's width, and the viewBox gives it the height to match. */
+#inspector-preview svg[data-marpit-svg] {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+/* Choices are ordinary links in the slide; only the pointer says they are the way on. */
+#play-text a {
+    cursor: pointer;
+}
+
+/* Previous / next along the default sequence, in the corner the story chose: at the edge of the play view,
+   and over the corner of the slide in the node preview, a little smaller. */
+.slide-nav {
+    --slide-nav-inset: 12px;
+    position: absolute;
+    display: flex;
+    gap: 6px;
+    z-index: 1;
+}
+
+.slide-nav[data-position="top-right"] { top: var(--slide-nav-inset); right: var(--slide-nav-inset); }
+.slide-nav[data-position="bottom-right"] { bottom: var(--slide-nav-inset); right: var(--slide-nav-inset); }
+.slide-nav[data-position="top-left"] { top: var(--slide-nav-inset); left: var(--slide-nav-inset); }
+.slide-nav[data-position="bottom-left"] { bottom: var(--slide-nav-inset); left: var(--slide-nav-inset); }
+
+#preview-nav {
+    --slide-nav-inset: 6px;
+    gap: 4px;
+}
+
+#preview-nav .play-nav-button {
+    min-width: 24px;
+    height: 24px;
+    padding: 0 6px;
+}
+
+.play-nav-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 32px;
+    height: 32px;
+    max-width: 240px;
+    padding: 0 8px;
+    background: var(--cel-control-bg);
+    border: 1px solid var(--cel-panel-edge);
+    border-radius: var(--cel-radius-control);
+    font-size: var(--cel-font-size-small);
+    cursor: pointer;
+}
+
+.play-nav-button:hover { background: var(--cel-button-hover-bg); }
+
+/* The position in the sequence, s/t, between the two arrows. It has a ground of its own so it reads over a
+   slide in the preview. */
+.slide-nav-count {
+    align-self: center;
+    padding: 1px 6px;
+    border-radius: var(--cel-radius-control);
+    background: var(--cel-control-bg);
+    font-size: var(--cel-font-size-small);
+    font-variant-numeric: tabular-nums;
+    color: var(--cel-text-secondary);
+}
+
+.play-nav-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* The message shown when a link points at a node that no longer exists, outside any slide. */
+#play-text > p,
+#inspector-slide > p {
+    margin: auto;
+    padding: 8px;
+    text-align: center;
+    font-size: var(--cel-font-size-small);
+}
+
+#play-text > p {
+    color: var(--cel-text-secondary);
+    text-align: center;
+}

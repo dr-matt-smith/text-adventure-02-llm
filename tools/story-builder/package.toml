@@ -1,0 +1,6 @@
+[package]
+name = "story-builder"
+title = "Story Builder"
+
+[contributes]
+editors = ["story.editor.toml"]

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="styles.css" />
+    <title>OCTAD Text Adventures</title>
+  </head>
+  <body>
+    <main>
+      <!-- Phaser creates the game's <canvas> inside this div -->
+      <div id="game"></div>
+
+      <section class="controls">
+        <h3>Controls</h3>
+        <div class="control-grid">
+          <kbd>Type</kbd>
+          <span>A command, e.g. LOOK, NORTH, TAKE LANTERN</span>
+          <kbd>Enter</kbd>
+          <span>Do it (and start; play again)</span>
+          <kbd>&uarr; &darr;</kbd>
+          <span>Bring back an earlier command</span>
+          <kbd>Help</kbd>
+          <span>Type HELP to list every command</span>
+        </div>
+      </section>
+    </main>
+    <script src="game.js"></script>
+  </body>
+</html>

@@ -1,0 +1,18 @@
+[editor]
+id = "story-document"
+type = "document"
+entry-point = "index.html"
+display-name = "Story_Editor_Name"
+description = "Story_Editor_Description"
+
+[[file-types]]
+extension = ".story"
+display-name = "Story_FileType_Story"
+icon = "bs-book"
+icon-color = "#82AAFF"
+
+[[templates]]
+id = "empty"
+display-name = "Story_Template_Empty"
+template-file = "templates/empty.story"
+default = true

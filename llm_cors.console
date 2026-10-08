@@ -1,0 +1,7 @@
+[session]
+type = "shell"
+
+[[session.shortcut]]
+label = "start LLM CORS"
+icon = "bs-chat-dots"
+text = "~/.lmstudio/bin/lms server start --cors"

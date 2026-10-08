@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Story Builder</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/assets/bootstrap-icons/bootstrap-icons.css">
+    <link rel="stylesheet" href="/assets/celbridge-client/celbridge.css">
+    <link rel="stylesheet" href="css/story.css">
+    <!-- Marp emits the stylesheet for the slide it rendered; play mode writes it here. -->
+    <style id="slide-style"></style>
+</head>
+<body>
+    <!-- The editor's actions, as the shared rail laid across the top of the canvas. -->
+    <div id="toolbar" class="cel-rail cel-rail-horizontal">
+        <!-- The two views of the story, shown one at a time: the default sequence as a list, or the graph.
+             They are toggles rather than edits, so they sit in a section of their own. -->
+        <button class="cel-rail-button view-button" id="btn-sequence" type="button" aria-pressed="false"
+                data-view="sequence"
+                data-loc-key="Story_Toolbar_Sequence" data-loc-attr="title,aria-label"><i class="bi bi-list-ol"></i></button>
+        <button class="cel-rail-button view-button selected" id="btn-graph" type="button" aria-pressed="true"
+                data-view="graph"
+                data-loc-key="Story_Toolbar_Graph" data-loc-attr="title,aria-label"><i class="bi bi-diagram-3"></i></button>
+        <div class="cel-rail-separator"></div>
+        <button class="cel-rail-button" id="btn-add-node" type="button"
+                data-loc-key="Story_Toolbar_AddNode" data-loc-attr="title,aria-label"><i class="bi bi-plus-square"></i></button>
+        <button class="cel-rail-button" id="btn-delete-node" type="button" disabled
+                data-loc-key="Story_Toolbar_DeleteNode" data-loc-attr="title,aria-label"><i class="bi bi-trash3"></i></button>
+        <div class="cel-rail-separator"></div>
+        <button class="cel-rail-button" id="btn-export" type="button"
+                data-loc-key="Story_Toolbar_Export" data-loc-attr="title,aria-label"><i class="bi bi-file-earmark-spreadsheet"></i></button>
+
+        <!-- Playing is its own thing, so it sits in a section of its own after the actions that change the
+             story, rather than away at the far end of the rail where it is easy to miss. The title and the
+             colour are set from script: the button switches between Play and Stop. -->
+        <div class="cel-rail-separator"></div>
+        <button class="cel-rail-button play-button" id="btn-play" type="button"><i class="bi bi-play-fill"></i></button>
+
+        <!-- Export to PDF writes a file rather than editing the story, so it sits apart at the far end. The icon
+             is drawn here rather than taken from the icon font: a page with a red PDF badge and a download arrow.
+             While an export runs, the hourglass stands in for it. -->
+        <button class="cel-rail-button pdf-button" id="btn-pdf" type="button"
+                data-loc-key="Story_Toolbar_Pdf" data-loc-attr="title,aria-label">
+            <svg class="pdf-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path class="pdf-icon-page" d="M7 2.5h8l4.5 4.5v14.5H7z M15 2.5V7h4.5"/>
+                <rect class="pdf-icon-badge" x="1.5" y="6.5" width="11.5" height="6.5" rx="1"/>
+                <text class="pdf-icon-label" x="7.25" y="11.6">PDF</text>
+                <path class="pdf-icon-arrow" d="M17 12.5h2.4v4h2.6L18.2 21.5l-3.8-5H17z"/>
+            </svg>
+            <i class="bi bi-hourglass-split pdf-busy-icon"></i>
+        </button>
+
+        <!-- The story's settings open in the panel in place of the story or node, and close from here again. -->
+        <div class="cel-rail-separator"></div>
+        <button class="cel-rail-button" id="btn-settings" type="button" aria-pressed="false"
+                data-loc-key="Story_Toolbar_Settings" data-loc-attr="title,aria-label"><i class="bi bi-sliders"></i></button>
+    </div>
+
+    <div id="main">
+        <!-- Editor view -->
+        <!-- The arrangement the script writes once it has measured the document; inline until then. -->
+        <div id="editor-view" data-layout="inline" data-view="graph">
+            <!-- The graph and the sequence list share this area, one at a time. The notice sits over
+                 whichever is showing. -->
+            <div id="view-area">
+                <div id="canvas-container">
+                    <canvas id="connection-canvas"></canvas>
+                    <div id="canvas"></div>
+                </div>
+                <!-- The default sequence: the order of the story's nodes, reordered by dragging a handle. -->
+                <div id="sequence-panel" class="hidden">
+                    <div class="sequence-header" data-loc-key="Story_Sequence_Title"></div>
+                    <ol id="sequence-list"></ol>
+                </div>
+                <div id="notice" class="hidden" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    <span id="notice-text"></span>
+                    <button id="notice-dismiss" class="cel-icon-button" type="button"
+                            data-loc-key="Story_Notice_Dismiss" data-loc-attr="title,aria-label"><i class="bi bi-x-lg"></i></button>
+                </div>
+            </div>
+            <div id="splitter" class="cel-splitter"></div>
+            <!-- The properties panel, on the surface the host's settings panels use: a section carved out
+                 of the page under its own heading. It shows the selected node, or the story itself when
+                 nothing is selected. -->
+            <div id="inspector">
+                <div class="cel-section-area">
+                    <!-- The story header carries the story's name in the middle, edited in place the way a
+                         node's is; the left column is kept empty so the name sits centred in both headers. -->
+                    <div class="cel-section-header name-header" data-panel="story">
+                        <div></div>
+                        <div class="name-box-slot">
+                            <input type="text" id="story-name" class="name-box" autocomplete="off"
+                                   data-loc-key="Story_Placeholder_StoryName" data-loc-attr="placeholder">
+                        </div>
+                        <h1 data-loc-key="Story_Story_Title"></h1>
+                    </div>
+                    <!-- The node header carries the text view buttons (the Markdown editor's three, in its
+                         order) at its left, and the node itself, drawn as it is on the canvas, in the middle. -->
+                    <div class="cel-section-header name-header hidden" data-panel="node">
+                        <div class="text-mode-buttons" role="group">
+                            <button class="cel-icon-button text-mode-button" type="button" data-mode="preview"
+                                    data-loc-key="Story_TextMode_Preview" data-loc-attr="title,aria-label"><i class="bi bi-file-richtext"></i></button>
+                            <!-- Two splits, each drawn as the way it divides the field: side by side, or the text
+                                 above the preview. The second is the first icon turned on its side. -->
+                            <button class="cel-icon-button text-mode-button" type="button" data-mode="split-columns"
+                                    data-loc-key="Story_TextMode_SplitColumns" data-loc-attr="title,aria-label"><i class="bi bi-layout-split"></i></button>
+                            <button class="cel-icon-button text-mode-button" type="button" data-mode="split-rows"
+                                    data-loc-key="Story_TextMode_SplitRows" data-loc-attr="title,aria-label"><i class="bi bi-layout-split split-rows-icon"></i></button>
+                            <button class="cel-icon-button text-mode-button" type="button" data-mode="source"
+                                    data-loc-key="Story_TextMode_Source" data-loc-attr="title,aria-label"><i class="bi bi-code-slash"></i></button>
+                        </div>
+                        <!-- The node's name, always a text box, drawn as the node is on the canvas: a click puts
+                             the caret in it. The slot around it carries the START label, which an input can't. -->
+                        <div id="node-name-slot" class="name-box-slot">
+                            <input type="text" id="inspector-name" class="name-box" spellcheck="false" autocomplete="off"
+                                   data-loc-key="Story_Inspector_NamePlaceholder" data-loc-attr="placeholder">
+                        </div>
+                        <h1 data-loc-key="Story_Inspector_Title"></h1>
+                    </div>
+                    <!-- The settings header carries a close button at its left, which goes back to what the panel
+                         showed before: the selected node, or the story. -->
+                    <div class="cel-section-header name-header hidden" data-panel="settings">
+                        <div>
+                            <button id="settings-close" class="cel-icon-button" type="button"
+                                    data-loc-key="Story_Settings_Close" data-loc-attr="title,aria-label"><i class="bi bi-x-lg"></i></button>
+                        </div>
+                        <div></div>
+                        <h1 data-loc-key="Story_Settings_Title"></h1>
+                    </div>
+                    <div class="cel-section-content">
+                        <section class="inspector-section" data-panel="story">
+                            <label class="field inspector-fill-field">
+                                <span class="field-label" data-loc-key="Story_Field_StoryDescription"></span>
+                                <textarea id="story-description"
+                                          data-loc-key="Story_Placeholder_StoryDescription" data-loc-attr="placeholder"></textarea>
+                            </label>
+                            <!-- Beside the custom data, drags the share of the section between the description and the data. -->
+                            <div class="data-splitter" role="separator" aria-orientation="vertical"
+                                 data-loc-key="Story_DataSplitter" data-loc-attr="title,aria-label"></div>
+                            <!-- The story's custom data: one section per schema the story uses, built by script. -->
+                            <div id="story-data" class="data-sections hidden"></div>
+                        </section>
+                        <!-- The story's settings: the default sequence's navigation when playing, and its
+                             connections on the graph. Opened from the toolbar's settings button. -->
+                        <section class="inspector-section hidden" data-panel="settings">
+                            <div class="nav-settings">
+                                <label class="checkbox-field">
+                                    <input type="checkbox" id="story-nav-show">
+                                    <span data-loc-key="Story_Field_ShowNav"></span>
+                                </label>
+                                <div id="story-nav-options" class="nav-options hidden">
+                                    <label class="checkbox-field">
+                                        <input type="checkbox" id="story-nav-number">
+                                        <span data-loc-key="Story_Field_ShowNavNumber"></span>
+                                    </label>
+                                    <fieldset class="radio-group">
+                                        <legend class="field-label" data-loc-key="Story_Field_NavStyle"></legend>
+                                        <label><input type="radio" name="nav-style" value="arrows"><span data-loc-key="Story_NavStyle_Arrows"></span></label>
+                                        <label><input type="radio" name="nav-style" value="arrows-name"><span data-loc-key="Story_NavStyle_ArrowsName"></span></label>
+                                    </fieldset>
+                                    <fieldset class="radio-group">
+                                        <legend class="field-label" data-loc-key="Story_Field_NavPosition"></legend>
+                                        <label><input type="radio" name="nav-position" value="top-right"><span data-loc-key="Story_NavPosition_TopRight"></span></label>
+                                        <label><input type="radio" name="nav-position" value="bottom-right"><span data-loc-key="Story_NavPosition_BottomRight"></span></label>
+                                        <label><input type="radio" name="nav-position" value="top-left"><span data-loc-key="Story_NavPosition_TopLeft"></span></label>
+                                        <label><input type="radio" name="nav-position" value="bottom-left"><span data-loc-key="Story_NavPosition_BottomLeft"></span></label>
+                                    </fieldset>
+                                </div>
+                            </div>
+                            <div class="nav-settings">
+                                <label class="checkbox-field">
+                                    <input type="checkbox" id="story-seq-show">
+                                    <span data-loc-key="Story_Field_ShowSequenceArrows"></span>
+                                </label>
+                                <div id="story-seq-options" class="nav-options hidden">
+                                    <fieldset class="radio-group">
+                                        <legend class="field-label" data-loc-key="Story_Field_SequenceLineStyle"></legend>
+                                        <label><input type="radio" name="seq-style" value="dashed"><span data-loc-key="Story_SequenceLineStyle_Dashed"></span></label>
+                                        <label><input type="radio" name="seq-style" value="solid"><span data-loc-key="Story_SequenceLineStyle_Solid"></span></label>
+                                    </fieldset>
+                                    <label class="setting-row">
+                                        <span class="field-label" data-loc-key="Story_Field_SequenceColor"></span>
+                                        <input type="color" id="story-seq-color">
+                                    </label>
+                                    <label class="setting-row">
+                                        <span class="field-label" data-loc-key="Story_Field_SequenceAlpha"></span>
+                                        <span class="range-row">
+                                            <input type="range" id="story-seq-alpha" min="0" max="100" step="5">
+                                            <output id="story-seq-alpha-value" for="story-seq-alpha"></output>
+                                        </span>
+                                    </label>
+                                </div>
+                            </div>
+                            <!-- The schema files that give the story and its nodes their custom data fields. -->
+                            <div class="nav-settings">
+                                <span class="field-label" data-loc-key="Story_Field_Schemas"></span>
+                                <ul id="schema-list" class="schema-list"></ul>
+                                <select id="schema-add" data-loc-key="Story_Schemas_Add" data-loc-attr="title,aria-label"></select>
+                            </div>
+                        </section>
+                        <section class="inspector-section hidden" data-panel="node">
+                            <div class="field inspector-fill-field">
+                                <label class="field-label text-field-label" for="inspector-text" data-loc-key="Story_Inspector_Text"></label>
+                                <div id="text-editor" data-mode="source">
+                                    <textarea id="inspector-text"></textarea>
+                                    <!-- In split mode, drags the share of the field between the text and the preview. -->
+                                    <div id="text-splitter" role="separator" aria-orientation="horizontal"
+                                         data-loc-key="Story_TextSplitter" data-loc-attr="title,aria-label"></div>
+                                    <div id="inspector-preview">
+                                        <div id="inspector-slide"></div>
+                                        <!-- The story's previous / next buttons, as they will appear when playing. -->
+                                        <div id="preview-nav" class="slide-nav hidden">
+                                            <button class="play-nav-button slide-nav-prev" type="button"><i class="bi bi-chevron-left"></i><span class="play-nav-name"></span></button>
+                                            <span class="slide-nav-count hidden"></span>
+                                            <button class="play-nav-button slide-nav-next" type="button"><span class="play-nav-name"></span><i class="bi bi-chevron-right"></i></button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Beside the custom data, drags the share of the section between the text and the data. -->
+                            <div class="data-splitter" role="separator" aria-orientation="vertical"
+                                 data-loc-key="Story_DataSplitter" data-loc-attr="title,aria-label"></div>
+                            <!-- The node's custom data: one section per schema the story uses, built by script. -->
+                            <div id="node-data" class="data-sections hidden"></div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Play view -->
+        <div id="play-view" class="hidden">
+            <div id="play-content">
+                <div id="play-text"></div>
+            </div>
+            <!-- Previous / next along the default sequence, when the story asks for them. Titles are set
+                 from script, since they name the node each button goes to. -->
+            <div id="play-nav" class="slide-nav hidden">
+                <button class="play-nav-button slide-nav-prev" type="button"><i class="bi bi-chevron-left"></i><span class="play-nav-name"></span></button>
+                <span class="slide-nav-count hidden"></span>
+                <button class="play-nav-button slide-nav-next" type="button"><span class="play-nav-name"></span><i class="bi bi-chevron-right"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Where to save the PDF. The host has no save dialog to lend a package, so the editor draws its own: a
+         folder in the project, the PDFs already there, and a name, with a warning when the name is taken. -->
+    <dialog id="pdf-dialog" class="save-dialog" aria-labelledby="pdf-dialog-title">
+        <form id="pdf-dialog-form" method="dialog">
+            <h2 id="pdf-dialog-title" data-loc-key="Story_PdfDialog_Title"></h2>
+            <div class="save-dialog-columns">
+                <div class="save-dialog-column">
+                    <span class="field-label" id="pdf-folder-label" data-loc-key="Story_PdfDialog_Folder"></span>
+                    <ul id="pdf-folder-list" class="save-dialog-list" role="listbox" aria-labelledby="pdf-folder-label"></ul>
+                </div>
+                <div class="save-dialog-column">
+                    <span class="field-label" id="pdf-files-label" data-loc-key="Story_PdfDialog_Existing"></span>
+                    <ul id="pdf-file-list" class="save-dialog-list" aria-labelledby="pdf-files-label"></ul>
+                </div>
+            </div>
+            <label class="save-dialog-name">
+                <span class="field-label" data-loc-key="Story_PdfDialog_FileName"></span>
+                <input type="text" id="pdf-file-name" spellcheck="false" autocomplete="off">
+            </label>
+            <div id="pdf-dialog-path" class="save-dialog-path"></div>
+            <div id="pdf-dialog-warning" class="save-dialog-warning hidden" role="alert">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                <span id="pdf-dialog-warning-text"></span>
+            </div>
+            <div class="save-dialog-buttons">
+                <button type="button" id="pdf-dialog-cancel" data-loc-key="Story_PdfDialog_Cancel"></button>
+                <button type="submit" id="pdf-dialog-save" class="cel-accent"></button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- Marp renders a passage as a slide. It is imported from a CDN by js/story.js on first play, as are
+         html2canvas and jsPDF on first PDF export; a package that shipped would vendor the bundles the way
+         the QR editor vendors its encoder. -->
+    <script type="module" src="js/story.js"></script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+{
+  "namespace": "adventure",
+  "title": "Text adventure",
+  "story": [
+    { "key": "start", "label": "Start location", "type": "node", "help": "The location the player starts in" },
+    { "key": "title", "label": "Title", "type": "text", "help": "Big, on the start screen, e.g. STRANDED" },
+    { "key": "blurb", "label": "Blurb", "type": "multiline", "help": "Under the title on the start screen" },
+    { "key": "intro", "label": "Intro", "type": "multiline", "help": "The first thing printed when the game starts" },
+    { "key": "meterName", "label": "Meter name", "type": "text", "help": "What the clock is called, e.g. OXYGEN or DAYLIGHT" },
+    { "key": "runOutMessage", "label": "Run out message", "type": "multiline", "help": "Printed when the clock reaches 0" },
+    { "key": "wonTitle", "label": "Won title", "type": "text", "help": "The end screen's title when you win" },
+    { "key": "lostTitle", "label": "Lost title", "type": "text", "help": "The end screen's title when you lose" },
+    { "key": "wonMessage", "label": "Won message", "type": "multiline", "help": "The end screen's message when you win. {moves} is replaced by the number of moves" },
+    { "key": "lostMessage", "label": "Lost message", "type": "multiline", "help": "The end screen's message when you lose. {moves} is replaced by the number of moves" }
+  ],
+  "node": [
+    { "key": "mapCol", "label": "Mini map column", "type": "choice", "options": [0, 1, 2, 3], "help": "Where the location is drawn on the mini map, across (0 is the left)" },
+    { "key": "mapRow", "label": "Mini map row", "type": "choice", "options": [0, 1, 2], "help": "Where the location is drawn on the mini map, down (0 is the top)" },
+    { "key": "dark", "label": "Description when dark", "type": "multiline", "help": "Makes this a dark location: what the player sees here without a light" },
+    {
+      "key": "items",
+      "label": "Items",
+      "type": "list",
+      "help": "The items lying here when the game starts",
+      "fields": [
+        { "key": "type", "label": "Special type", "type": "choice", "options": ["", "lantern", "oxygen tank"], "help": "A special item, with its own behaviour. Leave as (none) for a plain item" },
+        { "key": "name", "label": "Name", "type": "text", "help": "A plain item's name" },
+        { "key": "description", "label": "Description", "type": "multiline", "help": "A plain item's description, shown by EXAMINE" }
+      ]
+    }
+  ]
+}
