@@ -12,6 +12,7 @@ Text adventures in Phaser 4 and TypeScript, based on Matt's  OCTAD college stude
 This versions links to a local LLM (if available), allowing free text entry, but no extra help such as multi-action plans etc. It just means the user can type free text, and either get an answer from the LLM about locations/descriptions the user has already seen, or their text is converted to one of the simple text commands permitted by the game parser.
 - performance on a 32Gb 2026 M5 MacBook Air is acceptabled, the agaent responding within a couple of seconds 
 - if I close everything other application of course :-)
+- I was using the [qwen/qwen3.6-35b-a3b](https://huggingface.co/Qwen/Qwen3.6-35B-A3B) model runing in [LM Studio](https://lmstudio.ai/)
 
 This project is also a nice example of the Command pattern
 - for students who are learning about OO Design Patterns ....
