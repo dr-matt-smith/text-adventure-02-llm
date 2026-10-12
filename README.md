@@ -1,7 +1,7 @@
 # Matt's OCTAD text adventures
 
 OCTAD = **O**pen **C**ollege **T**ext **AD**venture
-- made with the [Celbridge](https://www.celbridge.org/) game toolks workbench
+- made with the [Celbridge](https://www.celbridge.org/) game tools workbench
 - this repo is an open-source Celbridge project ready to download, run and mod ...
 
 **[▶ Play it in your browser](https://dr-matt-smith.github.io/text-adventure-02-llm/dist/)** - no download or build needed (the free-text LLM help needs [LM Studio](https://lmstudio.ai/) running on your own computer; see below).
